@@ -13,11 +13,12 @@ from .models import DefaultPerson, Person, ManualPrimaryKeyTest, Profile, Tag, T
 
 class GetOrCreateTests(TestCase):
 
-    def test_get_or_create(self):
-        p = Person.objects.create(
+    def setUp(self):
+        self.lennon = Person.objects.create(
             first_name='John', last_name='Lennon', birthday=date(1940, 10, 9)
         )
 
+    def test_get_or_create_method_with_get(self):
         p, created = Person.objects.get_or_create(
             first_name="John", last_name="Lennon", defaults={
                 "birthday": date(1940, 10, 9)
@@ -26,6 +27,8 @@ class GetOrCreateTests(TestCase):
         self.assertFalse(created)
         self.assertEqual(Person.objects.count(), 1)
 
+
+    def test_get_or_create_method_with_create(self):
         p, created = Person.objects.get_or_create(
             first_name='George', last_name='Harrison', defaults={
                 'birthday': date(1943, 2, 25)
@@ -34,35 +37,59 @@ class GetOrCreateTests(TestCase):
         self.assertTrue(created)
         self.assertEqual(Person.objects.count(), 2)
 
-        # If we execute the exact same statement, it won't create a Person.
-        p, created = Person.objects.get_or_create(
+
+    def test_get_or_create_redundant_instance(self):
+        """
+        If we execute the exact same statement twice, the second time,
+        it won't create a Person.
+        """
+        george, created = Person.objects.get_or_create(
             first_name='George', last_name='Harrison', defaults={
                 'birthday': date(1943, 2, 25)
             }
         )
+        evil_george, created = Person.objects.get_or_create(
+            first_name='George', last_name='Harrison', defaults={
+                'birthday': date(1943, 2, 25)
+            }
+        )
+
         self.assertFalse(created)
         self.assertEqual(Person.objects.count(), 2)
 
-        # If you don't specify a value or default value for all required
-        # fields, you will get an error.
+    def test_get_or_create_invalid_params(self):
+        """
+        If you don't specify a value or default value for all required
+        fields, you will get an error.
+        """
         self.assertRaises(
             IntegrityError,
             Person.objects.get_or_create, first_name="Tom", last_name="Smith"
         )
 
-        # If you specify an existing primary key, but different other fields,
-        # then you will get an error and data will not be updated.
-        ManualPrimaryKeyTest.objects.create(id=1, data="Original")
+class GetOrCreateTestsWithManualPKs(TestCase):
+
+    def setUp(self):
+        self.first_pk = ManualPrimaryKeyTest.objects.create(id=1, data="Original")
+
+    def test_create_with_duplicate_primary_key(self):
+        """
+        If you specify an existing primary key, but different other fields,
+        then you will get an error and data will not be updated.
+        """
         self.assertRaises(
             IntegrityError,
             ManualPrimaryKeyTest.objects.get_or_create, id=1, data="Different"
         )
         self.assertEqual(ManualPrimaryKeyTest.objects.get(id=1).data, "Original")
 
-        # get_or_create should raise IntegrityErrors with the full traceback.
-        # This is tested by checking that a known method call is in the traceback.
-        # We cannot use assertRaises/assertRaises here because we need to inspect
-        # the actual traceback. Refs #16340.
+    def test_get_or_create_raises_IntegrityError_plus_traceback(self):
+        """
+        get_or_create should raise IntegrityErrors with the full traceback.
+        This is tested by checking that a known method call is in the traceback.
+        We cannot use assertRaises here because we need to inspect
+        the actual traceback. Refs #16340.
+        """
         try:
             ManualPrimaryKeyTest.objects.get_or_create(id=1, data="Different")
         except IntegrityError:
